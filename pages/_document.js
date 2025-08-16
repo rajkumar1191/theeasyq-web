@@ -1,5 +1,5 @@
 import { Html, Head, Main, NextScript } from "next/document";
-
+import { Analytics } from '@vercel/analytics/next';
 export default function Document() {
   return (
     <Html lang="en">
@@ -39,7 +39,7 @@ export default function Document() {
       <body>
         <Main />
         <NextScript />
-        
+        <Analytics />
         {/* External JavaScript libraries - loaded after React hydration */}
         <script
           src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"
