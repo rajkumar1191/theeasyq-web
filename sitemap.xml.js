@@ -1,4 +1,4 @@
-import { getAllPosts } from "../lib/blog";
+import { getAllPosts } from "./lib/blog";
 
 function generateSiteMap(posts) {
   const baseUrl = "https://theeasyq.com";

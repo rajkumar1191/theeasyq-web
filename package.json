@@ -4,14 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run generate-sitemap && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "generate-sitemap": "node scripts/generate-sitemap.js"
   },
   "dependencies": {
     "@uiw/react-md-editor": "^4.0.8",
     "@vercel/analytics": "^1.5.0",
     "date-fns": "^2.30.0",
+    "firebase": "^12.1.0",
+    "firebase-admin": "^13.4.0",
     "gray-matter": "^4.0.3",
     "next": "14.0.3",
     "react": "^18",
