@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://theeasyq.com/sitemap.xml

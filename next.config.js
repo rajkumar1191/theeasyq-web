@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-//   output: "export",
+
   // Enable static export for better SEO
   trailingSlash: true,
   transpilePackages: [
@@ -71,11 +71,6 @@ const nextConfig = {
     //   optimizeCss: true,
     esmExternals: "loose",
   },
-//   exportPathMap: async function (defaultPathMap) {
-//     // Remove admin pages from export
-//     const { "/admin/blog": removed, ...pathMap } = defaultPathMap;
-//     return pathMap;
-//   },
 };
 
 module.exports = nextConfig;
