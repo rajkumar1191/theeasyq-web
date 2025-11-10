@@ -1,8 +1,9 @@
+// pages/blog/index.js
 import Head from "next/head";
 import Link from "next/link";
 import { getAllPosts } from "../../lib/blog";
 
-export default function Blog({ posts }) {
+export default function Blog({ posts = [] }) {
   return (
     <>
       <Head>
@@ -93,11 +94,22 @@ export default function Blog({ posts }) {
 }
 
 export async function getStaticProps() {
-  const posts = getAllPosts();
+  try {
+    const posts = await getAllPosts();
 
-  return {
-    props: {
-      posts,
-    },
-  };
+    return {
+      props: {
+        posts,
+      },
+      revalidate: 60, // Revalidate every 60 seconds for new posts
+    };
+  } catch (error) {
+    console.error("Error fetching blog posts:", error);
+    return {
+      props: {
+        posts: [],
+      },
+      revalidate: 60,
+    };
+  }
 }

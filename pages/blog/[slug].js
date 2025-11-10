@@ -1,10 +1,21 @@
+// pages/blog/[slug].js
 import Head from "next/head";
 import Link from "next/link";
 import { getAllPosts, getPostBySlug } from "../../lib/blog";
 
 export default function BlogPost({ post }) {
   if (!post) {
-    return <div>Post not found</div>;
+    return (
+      <div className="error-container">
+        <div className="container">
+          <h1>Post not found</h1>
+          <p>The blog post you're looking for doesn't exist.</p>
+          <Link href="/blog" className="btn-primary">
+            ← Back to Blog
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   // Ensure we have absolute URLs for sharing
@@ -63,7 +74,7 @@ export default function BlogPost({ post }) {
                 }
               },
               datePublished: post.date,
-              dateModified: post.date,
+              dateModified: post.updatedAt || post.date,
               mainEntityOfPage: {
                 "@type": "WebPage",
                 "@id": postUrl,
@@ -91,6 +102,15 @@ export default function BlogPost({ post }) {
                   day: "numeric",
                 })}
               </time>
+              {post.updatedAt && post.updatedAt !== post.date && (
+                <span className="post-updated">
+                  Updated: {new Date(post.updatedAt).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </span>
+              )}
             </div>
 
             <h1>{post.title}</h1>
@@ -218,15 +238,23 @@ export default function BlogPost({ post }) {
 }
 
 export async function getStaticPaths() {
-  const posts = getAllPosts();
-  const paths = posts.map((post) => ({
-    params: { slug: post.slug },
-  }));
+  try {
+    const posts = await getAllPosts();
+    const paths = posts.map((post) => ({
+      params: { slug: post.slug },
+    }));
 
-  return {
-    paths,
-    fallback: false, // Consider changing to 'blocking' for better UX with new posts
-  };
+    return {
+      paths,
+      fallback: 'blocking', // Changed to 'blocking' for better UX with new posts
+    };
+  } catch (error) {
+    console.error('Error generating static paths:', error);
+    return {
+      paths: [],
+      fallback: 'blocking',
+    };
+  }
 }
 
 export async function getStaticProps({ params }) {
@@ -243,8 +271,7 @@ export async function getStaticProps({ params }) {
       props: {
         post,
       },
-      // Add revalidation if you want ISR (Incremental Static Regeneration)
-      // revalidate: 60, // Revalidate every 60 seconds
+      revalidate: 60, // Revalidate every 60 seconds for updates
     };
   } catch (error) {
     console.error('Error fetching post:', error);

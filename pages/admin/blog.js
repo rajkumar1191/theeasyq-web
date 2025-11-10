@@ -1,15 +1,22 @@
+// pages/admin/blog.js - Updated with authentication
 import { useState, useEffect } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { getAllPosts } from "../../lib/blog";
 import dynamic from "next/dynamic";
+import AdminLogin from "./login";
 
 const MDEditor = dynamic(() => import("@uiw/react-md-editor"), { ssr: false });
 
 export default function BlogAdmin({ posts: initialPosts }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authToken, setAuthToken] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
   const [posts, setPosts] = useState(initialPosts);
   const [showNewPostForm, setShowNewPostForm] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
+  const [formLoading, setFormLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -21,6 +28,57 @@ export default function BlogAdmin({ posts: initialPosts }) {
     image: "",
   });
 
+  // Check authentication on component mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('adminToken');
+      if (token) {
+        try {
+          // Verify token with backend
+          const response = await fetch('/api/admin/verify', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            setAuthToken(token);
+            setIsAuthenticated(true);
+          } else {
+            localStorage.removeItem('adminToken');
+          }
+        } catch (error) {
+          localStorage.removeItem('adminToken');
+        }
+      }
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, []);
+
+  const handleLogin = (token) => {
+    setAuthToken(token);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('adminToken');
+    setAuthToken(null);
+    setIsAuthenticated(false);
+  };
+
+  const makeAuthenticatedRequest = async (url, options = {}) => {
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -31,6 +89,7 @@ export default function BlogAdmin({ posts: initialPosts }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setFormLoading(true);
 
     const slug = formData.title
       .toLowerCase()
@@ -44,36 +103,20 @@ export default function BlogAdmin({ posts: initialPosts }) {
         .split(",")
         .map((tag) => tag.trim())
         .filter((tag) => tag),
-      date: new Date().toISOString(),
-      slug,
+      slug: editingPost ? editingPost.slug : slug,
     };
 
     try {
-      const response = await fetch("/api/blog", {
+      const response = await makeAuthenticatedRequest("/api/blog", {
         method: editingPost ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...postData,
-          slug: editingPost ? editingPost.slug : slug,
-        }),
+        body: JSON.stringify(postData),
       });
 
       if (response.ok) {
-        const result = await response.json();
-
-        if (editingPost) {
-          setPosts(
-            posts.map((p) =>
-              p.slug === editingPost.slug
-                ? { ...postData, slug: editingPost.slug }
-                : p
-            )
-          );
-        } else {
-          setPosts([{ ...postData, slug }, ...posts]);
-        }
+        // Refresh posts list
+        const updatedPosts = await fetch("/api/blog");
+        const postsData = await updatedPosts.json();
+        setPosts(postsData);
 
         resetForm();
         alert(
@@ -82,17 +125,20 @@ export default function BlogAdmin({ posts: initialPosts }) {
             : "Post created successfully!"
         );
       } else {
-        alert("Error saving post");
+        const error = await response.json();
+        alert(`Error saving post: ${error.details || error.error}`);
       }
     } catch (error) {
       console.error("Error:", error);
       alert("Error saving post");
+    } finally {
+      setFormLoading(false);
     }
   };
 
   const handleEdit = async (post) => {
+    setFormLoading(true);
     try {
-      // Fetch the full post content including the markdown content
       const response = await fetch(`/api/blog/${post.slug}`);
       const fullPost = await response.json();
 
@@ -100,7 +146,7 @@ export default function BlogAdmin({ posts: initialPosts }) {
       setFormData({
         title: fullPost.title,
         excerpt: fullPost.excerpt,
-        content: fullPost.content || "", // This should now have the markdown content
+        content: fullPost.content || "",
         category: fullPost.category,
         author: fullPost.author,
         tags: fullPost.tags.join(", "),
@@ -109,18 +155,9 @@ export default function BlogAdmin({ posts: initialPosts }) {
       setShowNewPostForm(true);
     } catch (error) {
       console.error("Error fetching post:", error);
-      // Fallback to existing data
-      setEditingPost(post);
-      setFormData({
-        title: post.title,
-        excerpt: post.excerpt,
-        content: "", // Will be empty but at least form shows
-        category: post.category,
-        author: post.author,
-        tags: post.tags.join(", "),
-        image: post.image || "",
-      });
-      setShowNewPostForm(true);
+      alert("Error loading post for editing");
+    } finally {
+      setFormLoading(false);
     }
   };
 
@@ -129,12 +166,10 @@ export default function BlogAdmin({ posts: initialPosts }) {
       return;
     }
 
+    setFormLoading(true);
     try {
-      const response = await fetch("/api/blog", {
+      const response = await makeAuthenticatedRequest("/api/blog", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ slug }),
       });
 
@@ -142,11 +177,14 @@ export default function BlogAdmin({ posts: initialPosts }) {
         setPosts(posts.filter((p) => p.slug !== slug));
         alert("Post deleted successfully!");
       } else {
-        alert("Error deleting post");
+        const error = await response.json();
+        alert(`Error deleting post: ${error.details || error.error}`);
       }
     } catch (error) {
       console.error("Error:", error);
       alert("Error deleting post");
+    } finally {
+      setFormLoading(false);
     }
   };
 
@@ -164,6 +202,26 @@ export default function BlogAdmin({ posts: initialPosts }) {
     setEditingPost(null);
   };
 
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
+      }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
+
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return <AdminLogin onLogin={handleLogin} />;
+  }
+
+  // Show admin interface if authenticated
   return (
     <>
       <Head>
@@ -178,12 +236,22 @@ export default function BlogAdmin({ posts: initialPosts }) {
               ← Back to Home
             </Link>
             <h1>Blog Administration</h1>
-            <button
-              className="btn-primary"
-              onClick={() => setShowNewPostForm(!showNewPostForm)}
-            >
-              {showNewPostForm ? "Cancel" : "New Post"}
-            </button>
+            <div className="header-actions">
+              <button
+                className="btn-primary"
+                onClick={() => setShowNewPostForm(!showNewPostForm)}
+                disabled={formLoading}
+              >
+                {showNewPostForm ? "Cancel" : "New Post"}
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={handleLogout}
+                style={{ marginLeft: '10px' }}
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </header>
 
@@ -202,6 +270,7 @@ export default function BlogAdmin({ posts: initialPosts }) {
                       value={formData.title}
                       onChange={handleInputChange}
                       required
+                      disabled={formLoading}
                     />
                   </div>
 
@@ -214,6 +283,7 @@ export default function BlogAdmin({ posts: initialPosts }) {
                       onChange={handleInputChange}
                       rows="3"
                       required
+                      disabled={formLoading}
                     />
                   </div>
 
@@ -225,6 +295,7 @@ export default function BlogAdmin({ posts: initialPosts }) {
                         name="category"
                         value={formData.category}
                         onChange={handleInputChange}
+                        disabled={formLoading}
                       >
                         <option value="Health">Health</option>
                         <option value="Technology">Technology</option>
@@ -242,6 +313,7 @@ export default function BlogAdmin({ posts: initialPosts }) {
                         name="author"
                         value={formData.author}
                         onChange={handleInputChange}
+                        disabled={formLoading}
                       />
                     </div>
                   </div>
@@ -255,6 +327,7 @@ export default function BlogAdmin({ posts: initialPosts }) {
                       value={formData.tags}
                       onChange={handleInputChange}
                       placeholder="health, technology, tips"
+                      disabled={formLoading}
                     />
                   </div>
 
@@ -267,20 +340,12 @@ export default function BlogAdmin({ posts: initialPosts }) {
                       value={formData.image}
                       onChange={handleInputChange}
                       placeholder="https://example.com/image.jpg"
+                      disabled={formLoading}
                     />
                   </div>
 
                   <div className="form-group">
                     <label htmlFor="content">Content *</label>
-                    {/* <textarea
-                      id="content"
-                      name="content"
-                      value={formData.content}
-                      onChange={handleInputChange}
-                      rows="15"
-                      placeholder="Write your post content in Markdown format..."
-                      required
-                    /> */}
                     <MDEditor
                       value={formData.content}
                       onChange={(value) =>
@@ -296,13 +361,22 @@ export default function BlogAdmin({ posts: initialPosts }) {
                   </div>
 
                   <div className="form-actions">
-                    <button type="submit" className="btn-primary">
-                      {editingPost ? "Update Post" : "Create Post"}
+                    <button
+                      type="submit"
+                      className="btn-primary"
+                      disabled={formLoading}
+                    >
+                      {formLoading
+                        ? "Saving..."
+                        : editingPost
+                        ? "Update Post"
+                        : "Create Post"}
                     </button>
                     <button
                       type="button"
                       onClick={resetForm}
                       className="btn-secondary"
+                      disabled={formLoading}
                     >
                       Cancel
                     </button>
@@ -313,6 +387,8 @@ export default function BlogAdmin({ posts: initialPosts }) {
 
             <div className="posts-list">
               <h2>All Posts ({posts.length})</h2>
+
+              {formLoading && <div className="loading">Loading...</div>}
 
               {posts.length === 0 ? (
                 <div className="empty-state">
@@ -348,12 +424,14 @@ export default function BlogAdmin({ posts: initialPosts }) {
                         <button
                           onClick={() => handleEdit(post)}
                           className="btn-secondary"
+                          disabled={formLoading}
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(post.slug)}
                           className="btn-danger"
+                          disabled={formLoading}
                         >
                           Delete
                         </button>
@@ -371,11 +449,6 @@ export default function BlogAdmin({ posts: initialPosts }) {
 }
 
 export async function getServerSideProps() {
-  const posts = getAllPosts();
-
-  return {
-    props: {
-      posts,
-    },
-  };
+  const posts = await getAllPosts();
+  return { props: { posts } };
 }

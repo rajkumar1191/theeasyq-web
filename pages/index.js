@@ -1,10 +1,12 @@
+// pages/index.js
 import { useState, useEffect } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import * as gtag from "../lib/gtag";
 import { getAllPosts } from "../lib/blog";
 
-export default function Home({ latestPosts }) {
+export default function Home({ latestPosts = [] }) {
   const [isClient, setIsClient] = useState(false);
   const [animatedElements, setAnimatedElements] = useState(new Set());
   const router = useRouter();
@@ -44,7 +46,7 @@ export default function Home({ latestPosts }) {
     };
   }, []);
 
-  // Router events effect
+  // Router events effect (includes GA pageview tracking)
   useEffect(() => {
     const handleRouteChangeStart = () => {
       // Clean up mobile nav state
@@ -56,7 +58,9 @@ export default function Home({ latestPosts }) {
       }
     };
 
-    const handleRouteChangeComplete = () => {
+    const handleRouteChangeComplete = (url) => {
+      // Google Analytics pageview
+      gtag.pageview(url);
       // Re-initialize any necessary scripts after route change
       if (window.initializePageScripts) {
         window.initializePageScripts();
@@ -65,6 +69,9 @@ export default function Home({ latestPosts }) {
 
     router.events.on('routeChangeStart', handleRouteChangeStart);
     router.events.on('routeChangeComplete', handleRouteChangeComplete);
+
+    // Initial page load
+    gtag.pageview(window.location.pathname);
 
     return () => {
       router.events.off('routeChangeStart', handleRouteChangeStart);
@@ -104,7 +111,7 @@ export default function Home({ latestPosts }) {
   return (
     <>
       <Head>
-        <title>EasyQ — Book OPD Tokens Instantly | Skip Hospital Queues</title>
+        <title>EasyQ – Book OPD Tokens Instantly | Skip Hospital Queues</title>
         <meta
           name="description"
           content="EasyQ lets you book hospital tokens from your phone, skip long queues, and see doctors in 15 minutes. Trusted by top hospitals for fast, secure OPD visits."
@@ -118,7 +125,7 @@ export default function Home({ latestPosts }) {
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://theeasyq.com/" />
-        <meta property="og:title" content="EasyQ — Book OPD Tokens Instantly" />
+        <meta property="og:title" content="EasyQ – Book OPD Tokens Instantly" />
         <meta
           property="og:description"
           content="Skip the waiting room. See your doctor in 15 minutes with EasyQ's smart token booking system."
@@ -133,7 +140,7 @@ export default function Home({ latestPosts }) {
         <meta property="twitter:url" content="https://theeasyq.com/" />
         <meta
           property="twitter:title"
-          content="EasyQ — Book OPD Tokens Instantly"
+          content="EasyQ – Book OPD Tokens Instantly"
         />
         <meta
           property="twitter:description"
@@ -161,6 +168,13 @@ export default function Home({ latestPosts }) {
 
         <link rel="icon" href="/favicon.ico" />
         <link rel="canonical" href="https://theeasyq.com/" />
+
+        <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js"></script>
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-BEMYG17HM0"
+    ></script>
 
         {/* Enhanced CSS animations */}
         <style jsx>{`
@@ -519,6 +533,58 @@ export default function Home({ latestPosts }) {
             )}
           </div>
         </section>
+
+        {/* Blog Section (if you want to show latest posts) */}
+        {latestPosts.length > 0 && (
+          <section id="latest-posts" className="blog section">
+            <div className="container section-title fade-up">
+              <h2>Latest Blog Posts</h2>
+              <p>Stay updated with our latest insights and healthcare tips.</p>
+            </div>
+
+            <div className="container">
+              <div className="row gy-4">
+                {latestPosts.map((post, index) => (
+                  <div key={post.slug} className={`col-lg-4 fade-up animate-delay-${(index + 1) * 100}`}>
+                    <div className="post-item">
+                      {post.image && (
+                        <div className="post-img">
+                          <img src={post.image} alt={post.title} className="img-fluid" />
+                        </div>
+                      )}
+                      <div className="post-content">
+                        <div className="post-meta">
+                          <span className="post-category">{post.category}</span>
+                          <span className="post-date">
+                            {new Date(post.date).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                            })}
+                          </span>
+                        </div>
+                        <h3>
+                          <Link href={`/blog/${post.slug}`}>
+                            {post.title}
+                          </Link>
+                        </h3>
+                        <p>{post.excerpt}</p>
+                        <div className="post-author">
+                          <span>by {post.author}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="text-center mt-4 fade-up">
+                <Link href="/blog" className="btn btn-primary">
+                  View All Posts
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
       </main>
 
       <footer id="footer" className="footer dark-background">
@@ -551,9 +617,6 @@ export default function Home({ latestPosts }) {
             <a href="#" aria-label="Instagram">
               <i className="bi bi-instagram"></i>
             </a>
-            {/* <a href="#" aria-label="Skype">
-              <i className="bi bi-skype"></i>
-            </a> */}
             <a href="#" aria-label="LinkedIn">
               <i className="bi bi-linkedin"></i>
             </a>
@@ -579,13 +642,22 @@ export default function Home({ latestPosts }) {
   );
 }
 
-export async function getStaticProps() {
-  const allPosts = getAllPosts();
-  const latestPosts = allPosts.slice(0, 3);
+export async function getServerSideProps() {
+  try {
+    const allPosts = await getAllPosts();
+    const latestPosts = allPosts.slice(0, 3);
 
-  return {
-    props: {
-      latestPosts,
-    },
-  };
+    return {
+      props: {
+        latestPosts,
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching posts for home page:', error);
+    return {
+      props: {
+        latestPosts: [],
+      },
+    };
+  }
 }
